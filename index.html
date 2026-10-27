@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rogue Talent Calculator</title>
+<style>
+:root{--bg:#141414;--panel:#1c1c1c;--head:#262626;--gold:#f0d050;--green:#3ccf5a;--text:#d8d8d8;--dim:#555}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px Verdana,Tahoma,sans-serif;padding:16px;-webkit-user-select:none;user-select:none}
+.top{display:flex;justify-content:space-between;align-items:center;max-width:910px;margin:0 auto 12px}
+.top h1{font-size:17px;margin:0;color:#fff}
+.top b{color:var(--gold)}
+.top button{margin-left:12px}
+.wrap{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.panel{width:285px;background:var(--panel);border-radius:4px;overflow:hidden}
+.head{display:flex;justify-content:space-between;align-items:center;background:var(--head);padding:12px 14px;font-weight:bold;color:#fff;height:46px}
+.head span{color:#aaa;font-weight:normal}
+.tree{position:relative;height:462px;margin:0 8px}
+.tile{position:absolute;width:44px;height:44px;border:2px solid var(--dim);border-radius:4px;background:#222;display:flex;align-items:center;justify-content:center;font-size:25px;cursor:pointer;z-index:2}
+.tile i{font-style:normal;filter:grayscale(1) brightness(.6)}
+.tile .n{position:absolute;right:-3px;bottom:-5px;background:#000;color:#ccc;font:bold 10px Verdana,sans-serif;padding:1px 3px;border-radius:3px}
+.tile.open{border-color:var(--green)}
+.tile.open i,.tile.part i,.tile.max i{filter:none}
+.tile.open .n{color:var(--green)}
+.tile.part,.tile.max{border-color:var(--gold)}
+.tile.part .n,.tile.max .n{color:var(--gold)}
+.tile.locked{cursor:not-allowed}
+.passives{max-width:891px;margin:14px auto 0;background:var(--panel);border-radius:4px;padding:12px 14px}
+.passives h2{font-size:15px;margin:0 0 10px;color:#fff}
+.pas{border:2px dashed #4fc3f7;border-radius:4px;padding:8px 10px;margin-bottom:8px;line-height:1.4}
+.pas:last-child{margin-bottom:0}
+.pas b{color:var(--gold)}
+.tile.changed{outline:2px dashed #4fc3f7;outline-offset:3px}
+.legend{display:inline-block;width:14px;height:14px;border:2px dashed #4fc3f7;border-radius:3px;vertical-align:-3px;margin:0 6px 0 0}
+.key{color:#aaa;font-size:12px;margin-right:16px}
+#tip .chg{color:#4fc3f7;font-size:11px;margin:1px 0 2px}
+.arrow{position:absolute;width:4px;background:var(--dim);z-index:1}
+.arrow::after{content:"";position:absolute;left:-4px;bottom:-6px;border:6px solid transparent;border-top:8px solid var(--dim);border-bottom:0}
+.arrow.on{background:var(--gold)}
+.arrow.on::after{border-top-color:var(--gold)}
+.reset{display:block;width:calc(100% - 20px);margin:10px;padding:10px;background:#333;color:#ccc;border:0;border-radius:3px;cursor:pointer;font-weight:bold}
+.reset:hover,.top button:hover{background:#444}
+.top button{background:#333;color:#ccc;border:0;border-radius:3px;padding:6px 12px;cursor:pointer}
+#tip{position:fixed;display:none;max-width:290px;background:#0c0c10;border:1px solid #666;border-radius:4px;padding:10px 12px;z-index:9;pointer-events:none;line-height:1.4}
+#tip .nm{color:var(--gold);font-weight:bold;font-size:15px}
+#tip .rk{color:#fff;margin:2px 0 6px}
+#tip .cd{color:#fff;margin:-4px 0 6px}
+#tip .rq{color:#ff5050;margin-top:6px}
+#tip .hint{color:#777;font-size:11px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Rogue Talents</h1>
+  <div><span class="key"><span class="legend"></span>Changed talent</span>Points left: <b id="left">51</b><button id="resetAll">Reset all</button></div>
+</div>
+<div class="wrap" id="wrap"></div>
+<div class="passives"><h2>Notes</h2><div id="pas"></div></div>
+<div id="tip"></div>
+<script>
+// ---- TALENT DATA: edit this section to change talents --------------------
+// [id, name, icon, max ranks, row (1-7), column (0-3), requires (id or null), description]
+const TREES = [
+{ name:"Assassination", bg:"linear-gradient(#0f2a30,#091a1f 60%,#05090b)", t:[
+ ["gouge","Improved Gouge","💥",3,1,0,null,"Increases the duration of Gouge by 0.5 sec per rank."],
+ ["remorseless","Remorseless Attacks","💀",2,1,1,null,"After killing a non-trivial enemy, your next Sinister Strike, Backstab, Ambush, Mutilate or Ghostly Strike has +20% crit chance per rank. Lasts 20 sec."],
+ ["malice","Malice","🩸",5,1,2,null,"Increases your critical strike chance with all attacks and Poisons by 1% per rank."],
+ ["ruthless","Ruthlessness","⚔️",3,2,0,null,"Finishing moves have a 33/66/100% chance to add a combo point to the target.",1],
+ ["murder","Murder","☠️",2,2,1,null,"Increases all damage against Humanoids and Giants by 2% per rank."],
+ ["snd","Improved Slice and Dice","🌀",3,2,3,null,"Increases the duration of Slice and Dice by 15% per rank."],
+ ["relentless","Relentless Strikes","🔥",1,3,0,null,"Your finishing moves have a 20% chance per combo point to restore 25 energy."],
+ ["iea","Improved Expose Armor","🛡️",2,3,1,null,"Expose Armor costs 5 less energy per rank, and refunds 1 combo point when cast with 5 combo points."],
+ ["lethality","Lethality","🎯",5,3,2,"malice","Increases the critical strike damage bonus of Sinister Strike, Gouge, Backstab, Mutilate, Ghostly Strike and Hemorrhage by 6% per rank."],
+ ["coldblood","Cold Blood","❄️",1,4,1,null,"When activated, your next Sinister Strike, Backstab, Ambush, Eviscerate or Mutilate has +100% critical strike chance.",0,"3 min"],
+ ["ipoison","Improved Poisons","☣️",5,4,2,null,"Increases poison application chance by 2/4/6/8/10% and gives poison applications an 8/16/24/32/40% chance to resist dispel effects.",1],
+ ["vigor","Vigor","⚡",2,5,0,null,"Up to 1/2 combo points transfer from dead targets to new targets.",1],
+ ["mutilate","Mutilate","🗡️",1,5,1,null,"Attacks with both weapons for 75% weapon damage plus 13 with each. Deals 20% more to poisoned targets. Awards 2 combo points."],
+ ["vile","Vile Poisons","🧪",5,5,2,null,"Increases maximum Deadly Poison stacks by 1/2/3/4/5 and gives Deadly Poison applications a 20/40/60/80/100% chance not to consume a charge.",1],
+ ["aggpoison","Aggressive Poisoning","💉",1,5,3,null,"When activated, increases the damage of your poisons by 1% for every 100 attack power. Lasts 15 sec.",1,"5 min"],
+ ["sealfate","Seal Fate","🔮",5,6,2,null,"Your critical strikes from combo-point abilities have a 20% chance per rank to add an extra combo point."],
+ ["venom","Expose Vulnerability","🔓",1,7,1,"mutilate","Requires the target to be poisoned.<br>Finishing move that increases all periodic elemental damage from all players by 30% and increases your poison application chance by 10%.<br>Duration:<br>&nbsp;&nbsp;1 point: 18 sec<br>&nbsp;&nbsp;2 points: 21 sec<br>&nbsp;&nbsp;3 points: 24 sec<br>&nbsp;&nbsp;4 points: 27 sec<br>&nbsp;&nbsp;5 points: 30 sec",1]
+]},
+{ name:"Combat", bg:"linear-gradient(#2b1d10,#1d130a 60%,#0b0704)", t:[
+ ["ievis","Improved Eviscerate","🩸",3,1,0,null,"Increases the damage of Eviscerate by 7% per rank."],
+ ["iss","Improved Sinister Strike","🗡️",2,1,1,null,"Reduces the energy cost of Sinister Strike by 3 per rank."],
+ ["reflexes","Lightning Reflexes","🌩️",5,1,2,null,"Increases your Dodge chance by 1% per rank."],
+ ["puncture","Puncturing Wounds","📌",3,2,0,null,"Increases the critical strike chance of your Backstab by 10% and your Mutilate by 5% per rank.",1],
+ ["deflection","Deflection","🛡️",3,2,1,null,"Increases your Parry chance by 2% per rank."],
+ ["precision","Precision","🏹",3,2,2,null,"Increases your chance to hit with all attacks and poisons by 1% per rank."],
+ ["endurance","Endurance","🧱",2,3,0,null,"Reduces the cooldown of Sprint and Evasion by 30% per rank."],
+ ["riposte","Riposte","↩️",1,3,1,"deflection","A strike usable after parrying. Deals 150% weapon damage and disarms the target for 6 sec.",0,"6 sec"],
+ ["isprint","Improved Sprint","👟",2,3,3,null,"Gives Sprint a 50% chance per rank to remove all movement-impairing effects."],
+ ["ikick","Improved Kick","🦶",2,4,0,null,"Gives Kick a 50% chance per rank to silence the target for 2 sec."],
+ ["flawless","Flawless Execution","✨",1,4,1,null,"Reduces the energy cost of Eviscerate by 10."],
+ ["dualwield","Dual Wield Specialization","⚔️",5,4,2,"precision","Increases the damage done by your off-hand weapon by 10/20/30/40/50%.",1],
+ ["bladeflurry","Blade Flurry","🌪️",1,5,1,null,"Increases melee attack speed by 20% and your attacks hit one additional nearby enemy. Lasts 15 sec.",0,"2 min"],
+ ["hackslash","Hack and Slash","🪓",5,5,2,null,"Axe/Sword: 1% chance per rank for an extra attack. Dagger/Fist: +1% crit chance per rank. Mace: ignore 3% armor per rank."],
+ ["expertise","Weapon Expertise","🎓",2,6,1,"bladeflurry","Reduces the chance for your attacks to be Dodged or Parried by 1% per rank."],
+ ["aggression","Aggression","😠",3,6,2,null,"Increases the damage of Sinister Strike, Backstab and Eviscerate by 2% per rank."],
+ ["adrenaline","Adrenaline Rush","👁️",1,7,1,null,"Increases your energy regeneration by 100% for 15 sec.",0,"5 min"]
+]},
+{ name:"Subtlety", bg:"linear-gradient(#18251f,#101a16 60%,#070b09)", t:[
+ ["camo","Camouflage","🍃",5,1,0,null,"Reduces the speed penalty of Stealth by 3% per rank and reduces its cooldown by 2 sec per rank."],
+ ["mod","Master of Deception","🎭",3,1,1,null,"Enemies detect you in Stealth as if you were 1 level higher per rank."],
+ ["opportunity","Opportunity","🎲",2,1,2,null,"Increases the damage of Backstab, Garrote, Ambush and Mutilate by 5% per rank."],
+ ["igarrote","Improved Garrote","🪢",3,2,0,null,"Increases the damage of Garrote.",1],
+ ["elusive","Elusiveness","💨",2,2,1,null,"Reduces the cooldown of Vanish and Blind by 45 sec per rank."],
+ ["tricks","Improved Sap","🔔",1,2,2,null,"Sap now works on Demons and Beasts.",1],
+ ["iambush","Improved Ambush","🌑",3,2,3,null,"Increases the critical strike chance of Ambush by 15% per rank."],
+ ["initiative","Initiative","🚀",3,3,0,null,"Ambush, Garrote and Cheap Shot have a 33% chance per rank to add an extra combo point."],
+ ["ghostly","Ghostly Strike","👻",1,3,1,null,"Strikes for 125% weapon damage (180% with a dagger in the main hand) and raises your dodge by 15% for 7 sec. Awards 1 combo point.",0,"20 sec"],
+ ["idistract","Improved Distract","🔔",2,3,2,null,"Increases the radius of Distract by 3 yds per rank and makes distracted enemies worse at spotting you."],
+ ["senses","Heightened Senses","👂",2,4,0,null,"Increases Stealth detection as though you were 3/5 levels higher and reduces your chance to be hit by spells and ranged attacks by 2/4%.",1],
+ ["premed","Premeditation","🧠",1,4,1,null,"Adds 2 combo points to your target whenever you generate a combo point from stealth. This effect cannot occur more than once every 10 seconds.",1],
+ ["serrated","Serrated Blades","🔪",3,4,2,null,"Your attacks ignore 3% of the target's armor and Rupture does 10% more damage, per rank."],
+ ["deeds","Dirty Deeds","😈",2,5,0,null,"Cheap Shot and Garrote cost 10 less energy per rank, and Garrote no longer needs you to be behind the target."],
+ ["prep","Preparation","🔁",1,5,1,null,"When activated, immediately resets the cooldowns of your other rogue abilities.",0,"10 min"],
+ ["hemo","Hemorrhage","🩹",1,5,2,"serrated","Instant strike dealing 100% weapon damage (145% with a dagger) and causing the target to take 15% increased Bleed damage from all sources for 15 sec. Awards 1 combo point.",1],
+ ["quietus","Quietus","⚰️",5,6,0,"deeds","Sinister Strike, Ghostly Strike and Hemorrhage deal 2% more damage per rank to targets below 35% health."],
+ ["cutthroat","Cutthroat","🩸",5,6,2,null,"Backstab has a 20/40/60/80/100% chance to cause your next Ambush within 10 sec to not require Stealth.",1],
+ ["cuts","Thousand Cuts","🌹",1,7,1,"prep","Doubles the damage and duration of Rupture. Rupture now increases all physical damage taken by 10%.",1]
+]}
+];
+const MAX_POINTS = 51;
+// ---- NOTES (passives and other changes, not talents): [name, description] ----
+const PASSIVES = [
+ ["Expose Armor","By default, Expose Armor now matches the effect of Improved Expose Armor from WoW Classic."],
+ ["Quick Hands (New Passive or Active)","Uncaptured flags within 10 yards are instantly captured or recovered. Battleground objectives are captured 75% faster."],
+ ["Dual Wield Specialization and Improved Backstab","Changed back to their WoW Classic versions."]
+];
+// ---------------------------------------------------------------------------
+
+const all=[], byId={}, rank={}, els={}, arrows=[];
+const COLW=62, ROWH=61, X0=24, Y0=24;
+TREES.forEach((tr,i)=>tr.t=tr.t.map(a=>{
+  const x={id:a[0],name:a[1],icon:a[2],max:a[3],row:a[4],col:a[5],req:a[6],desc:a[7],changed:!!a[8],cd:a[9],tree:i};
+  all.push(x); byId[x.id]=x; rank[x.id]=0; return x;
+}));
+
+const spentBefore=(tree,row)=>all.filter(x=>x.tree===tree&&x.row<row).reduce((s,x)=>s+rank[x.id],0);
+const treeSpent=t=>all.filter(x=>x.tree===t).reduce((s,x)=>s+rank[x.id],0);
+const total=()=>all.reduce((s,x)=>s+rank[x.id],0);
+function block(x){
+  const need=(x.row-1)*5;
+  if(spentBefore(x.tree,x.row)<need) return `Requires ${need} points in ${TREES[x.tree].name} talents`;
+  if(x.req&&rank[x.req]<byId[x.req].max) return `Requires ${byId[x.req].max} point${byId[x.req].max>1?"s":""} in ${byId[x.req].name}`;
+  return null;
+}
+const valid=()=>all.every(x=>rank[x.id]===0||!block(x));
+
+function add(x){ if(total()<MAX_POINTS&&rank[x.id]<x.max&&!block(x)) rank[x.id]++; }
+function remove(x){ if(rank[x.id]>0){ rank[x.id]--; if(!valid()) rank[x.id]++; } }
+
+// ---- build the page ----
+const wrap=document.getElementById("wrap"), tip=document.getElementById("tip");
+TREES.forEach((tr,i)=>{
+  const p=document.createElement("div"); p.className="panel";
+  p.innerHTML=`<div class="head">${tr.name}<span id="ts${i}">0 / ${MAX_POINTS}</span></div><div class="tree" style="background:${tr.bg}"></div><button class="reset">✕ Reset</button>`;
+  const tree=p.querySelector(".tree");
+  tr.t.forEach(x=>{
+    const left=X0+x.col*COLW, top=Y0+(x.row-1)*ROWH;
+    const d=document.createElement("div"); d.className="tile";
+    d.style.left=left+"px"; d.style.top=top+"px";
+    d.innerHTML=`<i>${x.icon}</i><span class="n"></span>`; if(x.changed) d.dataset.changed="1";
+    d.onclick=e=>{ e.shiftKey?remove(x):add(x); render(); showTip(e,x); };
+    d.oncontextmenu=e=>{ e.preventDefault(); remove(x); render(); showTip(e,x); };
+    d.onmouseenter=d.onmousemove=e=>showTip(e,x);
+    d.onmouseleave=()=>tip.style.display="none";
+    tree.appendChild(d); els[x.id]=d;
+    if(x.req){
+      const r=byId[x.req], a=document.createElement("div"); a.className="arrow";
+      const rTop=Y0+(r.row-1)*ROWH;
+      a.style.left=(left+20)+"px"; a.style.top=(rTop+48)+"px";
+      a.style.height=(top-rTop-48-8)+"px";
+      tree.appendChild(a); arrows.push([a,r]);
+    }
+  });
+  p.querySelector(".reset").onclick=()=>{ all.filter(x=>x.tree===i).forEach(x=>rank[x.id]=0); render(); };
+  wrap.appendChild(p);
+});
+document.getElementById("resetAll").onclick=()=>{ all.forEach(x=>rank[x.id]=0); render(); };
+
+function showTip(e,x){
+  const b=block(x), r=rank[x.id];
+  tip.innerHTML=`<div class="nm">${x.name}</div>${x.changed?'<div class="chg">Changed talent</div>':''}<div class="rk">Rank ${r}/${x.max}</div>${x.cd?`<div class="cd">${x.cd} cooldown</div>`:''}<div>${x.desc}</div>`+
+    (b&&r===0?`<div class="rq">${b}</div>`:"")+
+    `<div class="hint">Left-click to learn · Right-click to unlearn</div>`;
+  tip.style.display="block";
+  const w=tip.offsetWidth, h=tip.offsetHeight;
+  let lx=e.clientX+16, ly=e.clientY+16;
+  if(lx+w>innerWidth-8) lx=e.clientX-w-16;
+  if(ly+h>innerHeight-8) ly=innerHeight-h-8;
+  tip.style.left=Math.max(4,lx)+"px"; tip.style.top=Math.max(4,ly)+"px";
+}
+
+function render(){
+  const left=MAX_POINTS-total();
+  document.getElementById("left").textContent=left;
+  all.forEach(x=>{
+    const el=els[x.id], r=rank[x.id], locked=!!block(x)&&r===0||(left===0&&r===0);
+    el.querySelector(".n").textContent=`${r}/${x.max}`;
+    el.className="tile "+(r===x.max?"max":r>0?"part":locked?"locked":"open")+(x.changed?" changed":"");
+  });
+  arrows.forEach(([a,r])=>a.classList.toggle("on",rank[r.id]===r.max));
+  TREES.forEach((_,i)=>document.getElementById("ts"+i).textContent=`${treeSpent(i)} / ${MAX_POINTS}`);
+}
+document.getElementById("pas").innerHTML=PASSIVES.map(p=>`<div class="pas"><b>${p[0]}</b><br>${p[1]}</div>`).join("");
+render();
+</script>
+</body>
+</html>
